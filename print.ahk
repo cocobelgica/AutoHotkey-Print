@@ -1,41 +1,40 @@
 /* Function: print
  * Print 'objects' to the stream 'f' separated by 's' and followed by 'e'.
  * Syntax:
- *     print( objects* [, kwargs := {s:"", e:"`n", f:""} ] )
+ *     print( objects* [, kwargs := {s:"", e:"`n", f:"*"} ] )
  * Parameter(s):
  *     objects*  [in] - Variadic number of item(s) to print. Item can be
  *                      a string, number or object*.
  *     kwargs    [in] - An asscoiative array w/ the following keys(optional):
  *     • s            - separates each object with the specified character(s).
  *     • e            - ending character, default is newline (`n)
- *     • f            - file to write to, defaults to StdOut. Other options
+ *     • f            - file to write to, defaults to stdout. Other options
  *                      are also available for this argument, see below:
  *
  * Options for kwargs["f"]:
- * 1.) If the argument begins w/ an asterisk(*), it is assumed to be either
- *     one of the standard IO streams: StdIn, StdOut OR StdErr. Specify either
- *     of the following strings: "in", "out", "error" after the asterisk to
- *     print to the respective standard device. There must be no whitespace in
- *     between the asterisk and the word.
- *     Usage: print("Hello World", {f: "*error"}) ; writes to StdErr
- *                      
- * 2.) An object with a Write(string) method may also be specified for more
+ * 1.) An object with a Write(string) method may also be specified for more
  *     control on how to display the output. e.g.: display in GUI, MsgBox, etc.
  *     Usage: print("Hello World", {f: custom_object})
  *
- * 3.) Alternatively, output may also be displayed on the script's main window.
+ * 2.) Alternatively, output may also be displayed on the script's main window.
  *     To do so, argument must begin with a colon(:) optionally followed by one
- *     or more of the following option(s), space-delimited:
+ *     or more of the following option(s), whitespace-delimited:
  *     Xn,Yn,Wn,Hn - size and position of the script's main window when shown.
- *     Tn          - timeout in milliseconds before returning. Defaults to 0
- *                   which is no timeout. If 'n' is negative, the window will
- *                   be automatically closed after timeout has elapsed. Otherwise,
- *                   window remains visible. To wait indefinitely, specify an
- *                   asterisk for 'n'.
+ *     Tn          - timeout in milliseconds before returning. If value is
+ *                   negative, the window will be automatically closed after
+ *                   timeout has elapsed. Otherwise, window remains visible.
+ *                   To wait indefinitely, specify an asterisk for 'n'. Default
+ *                   is 0.
  *     Usage: print("Hello World", {f: ":x0 y0 w600 h400 t5000"}) ; 5 seconds
  *
+ * 3.) To send output to one of the standard I/O streams (stdin[uncommon, does
+ *     it even work??], stdout & stderror), specify 0 up to 2 asterisks(*).
+ *     Wherein, no asterisk is stdin, 1 asterisk is stdout and 2 asterisks is
+ *     stderror. Default value of kwargs["f"] is "*", which is stdout.
+ *     Usage: print("Hello World", {f:"**"}) ; print to stderror
+ *
  * Remarks:
- *     When printing object(s), only standard AHK object(s) are supported.
+ *     When printing actual object(s), only standard AHK object(s) are supported.
  *     Other types such as COM, Func, File, RegExMatch, etc. objects are not
  *     supported.
  */
@@ -45,11 +44,10 @@ print(args*) {
 	     , del   := Func(is_v2 ? "ObjRemoveAt" : "ObjRemove")
 	static default := { ;// default values for kwargs
 	(Join Q C
-		"f": "",  ;// file to write to, default is StdOut
+		"f": "*", ;// file to write to, default is stdout
 		"s": "",  ;// separator
 		"e": "`n" ;// end
 	)}
-	static std_streams := {"in":-10, "out":-11, "error":-12}
 	;// MaxIndex/Length == Count
 	if ((max := %len%(args)) == NumGet(&args+4*A_PtrSize)) {
 		match := false
@@ -76,11 +74,10 @@ print(args*) {
 		return
 	}
 
-	file := Trim(file, " `t`r`n"), token := SubStr(file, 1, 1)
-	if (token != ":") {
-		if (is_std := InStr("*", token))
-			if !(file := InStr("*", file) ? -11 : std_streams[SubStr(file, 2)])
-				file := -11
+	file := Trim(file, " `t`r`n")
+	if (SubStr(file, 1, 1) != ":") {
+		if (is_std := InStr("**", file)) ;// Standard IO streams
+			file := -10-StrLen(file)
 		f := FileOpen(
 		(Join Q C
 			is_std ? DllCall("GetStdHandle", "Int", file, "Ptr") : file,
@@ -105,18 +102,19 @@ print(args*) {
 	ControlGet hEdit, Hwnd,, Edit1
 	ControlSetText,, %out%, ahk_id %hEdit%
 	;// parse options
-	x := y := w := h := "", t := 0, i := 1
-	while ((ch := SubStr(file, ++i, 1)) != "") {
-		if !InStr("xywht", ch)
-			continue
-		val := SubStr(file, i+1, (SubStr(file, i+1) ~= "\s|$")-1)
-		, i += StrLen(val)-1
-		, %ch% := (ch != "t") ? val : (val == "*" ? "" : val/1000)
+	f := SubStr(file, 2), file := is_v2? f : "f"
+	, x := y := w := h := "", t := 0
+	Loop Parse, %file%, % " `t`r`n"
+	{
+		if (InStr(" xywht", opt := SubStr(A_LoopField, 1, 1)) - 1) {
+			val := SubStr(A_LoopField, 2)
+			%opt% := (opt != "t") ? val : (val == "*" ? "" : val/1000)
+		}
 	}
 	WinMove ahk_id %A_ScriptHwnd%,, %x%, %y%, %w%, %h%
 	if !DllCall("IsWindowVisible", "Ptr", A_ScriptHwnd)
 		WinShow
-	if InStr(file, "t") {
+	if (t != 0) { ;// No need to call these commands if timeout is 0
 		DetectHiddenWindows Off
 		WinWaitClose, ahk_id %A_ScriptHwnd%,, % Abs(t)
 		if (ErrorLevel && t < 0) ;// timed out and value is negative
