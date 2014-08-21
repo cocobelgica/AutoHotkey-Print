@@ -77,13 +77,9 @@ print(args*) {
 	file := Trim(file, " `t`r`n")
 	if (SubStr(file, 1, 1) != ":") {
 		if (is_std := InStr("**", file)) ;// Standard IO streams
-			file := -10-StrLen(file)
-		f := FileOpen(
-		(Join Q C
-			is_std ? DllCall("GetStdHandle", "Int", file, "Ptr") : file,
-			is_std ? "h" : "w"
-		))
-		f.Write(out), f.Close() ;// flushes the write buffer
+			file := DllCall("GetStdHandle", "Int", -10-StrLen(file), "Ptr")
+		if (f := FileOpen(file, is_std ? "h" : "w"))
+			f.Write(out), f.Close() ;// flushes the write buffer
 		return
 	}
 	;// else print output to script's main window
