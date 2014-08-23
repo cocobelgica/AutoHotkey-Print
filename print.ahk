@@ -87,13 +87,17 @@ print(args*) {
 	DetectHiddenWindows On
 	if !WinExist("ahk_id " A_ScriptHwnd) ;// make LastFound
 		return
+	out := Trim(out, kwargs.e) ;// remove 'end' ??
 	;// convert line endings to "`r`n" (Windows)
-	out := Trim(out, kwargs.e), i := 1
-	while (i := InStr(out, "`r",, i))
-		out := SubStr(out, 1, i-1) . SubStr(out, i+1)
+	i := 0
+	while (i := InStr(out, "`r`n",, i+1)) ;// DOS to Unix
+		out := SubStr(out, 1, i-1) . "`n" . SubStr(out, i+2)
+	i := 0
+	while (i := InStr(out, "`r",, i+1)) ;// Mac to Unix
+		out := SubStr(out, 1, i-1) . "`n" . SubStr(out, i+1)
 	i := -1
-	while (i := InStr(out, "`n",, i+2))
-		out := SubStr(out, 1, i-1) "`r`n" SubStr(out, i+1)
+	while (i := InStr(out, "`n",, i+2)) ;// Unix to DOS
+		out := SubStr(out, 1, i-1) . "`r`n" . SubStr(out, i+1)
 	
 	ControlGet hEdit, Hwnd,, Edit1
 	ControlSetText,, %out%, ahk_id %hEdit%
@@ -135,13 +139,28 @@ print(args*) {
  *     Add detection of circular references, output as '{...}' like Python
  */
 print_r(obj) {
-	q := Chr(34) ;// Double quotes, make it work for both v1.1 and v2.0-a
+	static is_v2   := A_AhkVersion >= "2", q := Chr(34)
+	     , type    := is_v2 ? Func("Type") : ""
+	     , regex   := RegExMatch("", is_v2? "" : "O)", regex) ? regex : 0
+	     , _i64tos := "msvcrt.dll\_i64to" . ( A_IsUnicode ? "w" : "a" )
+	
 	if IsObject(obj) {
+		tobj := is_v2                           ? %type%(obj)
+		     :  ObjGetCapacity(obj) != ""       ? "Object"
+		     :  IsFunc(obj)                     ? "Func"
+		     :  ComObjType(obj) != ""           ? "ComObject"
+		     :  NumGet(&obj) == NumGet(&regex)  ? "RegExMatchObject"
+		     :                                    "FileObject"
+		if (tobj != "Object") {
+			VarSetCapacity(out, 65, 0)
+			, DllCall(_i64tos, "Int64", &obj, "Str", out, "UInt", 16, "CDecl")
+			return "<" . tobj . " at 0x" . out . ">"
+		}
+		;// standard AHK object
 		is_array := 0
 		for k in obj
 			is_array := (k == A_Index)
 		until !is_array
-		;// count := NumGet(&obj+4*A_PtrSize) -> unreliable, object might have custom behavior
 		out := ""
 		for k, v in obj {
 			if !is_array
@@ -153,12 +172,8 @@ print_r(obj) {
 	}
 	if (ObjGetCapacity([obj], 1) == "") ;// not a string, assume number
 		return obj
-	/*
-	float := "float"
-	if obj is %float%
-		return obj
-	*/
-	esc_seq := {          ;// AHK escape sequences
+	
+	static esc_seq := { ;// AHK escape sequences
 	(Join Q C
 		(q):  "``" . q,   ;// double-quotes
 		"`n": "``n",      ;// newline
