@@ -157,12 +157,12 @@ print_r(obj) {
 			return "<" . tobj . " at 0x" . out . ">"
 		}
 		;// standard AHK object
-		is_array := 0
-		for k in obj
-			is_array := (k == A_Index)
-		until !is_array
-		out := ""
-		for k, v in obj {
+		is_array := 0, enum := ObjNewEnum(obj) ;// bypass _NewEnum() meta-function
+		while enum[k] ;// for k in obj
+			if !( is_array := (k == A_Index) )
+				break
+		out := "", enum := ObjNewEnum(obj) ;// reset enumerator
+		while enum[k, v] { ;// for k, v in obj
 			if !is_array
 				out .= print_r(k) . ": "
 			out .= print_r(v) . ", "
