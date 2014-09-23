@@ -1,23 +1,26 @@
-/* Function: print
- * Print 'objects' to the stream 'f' separated by 's' and followed by 'e'.
+/* Function: Print
+ *     Print 'args' to to the stream 'file' separated by 'sep' and followed
+ *     by 'end' OR alternatively sends the output the script's main window or
+ *     to the specified function.
+ * Requirements: AutoHotkey v1.1+ OR v2.0-a054+
+ * License: WTFPL [http://www.wtfpl.net/]
  * Syntax:
- *     print( objects* [, kwargs := {s:"", e:"`n", f:"*"} ] )
+ *     print( args* [, kwargs := [ "file=*", "sep=", "end=`n" ] ] )
+ * Return value:
+ *     None
  * Parameter(s):
- *     objects*  [in] - Variadic number of item(s) to print. Item can be
- *                      a string, number or object*.
- *     kwargs    [in] - An asscoiative array w/ the following keys(optional):
- *     • s            - separates each object with the specified character(s).
- *     • e            - ending character, default is newline (`n)
- *     • f            - file to write to, defaults to stdout. Other options
- *                      are also available for this argument, see below:
- *
- * Options for kwargs["f"]:
- * 1.) An object with a Write(string) method may also be specified for more
- *     control on how to display the output. e.g.: display in GUI, MsgBox, etc.
- *     Usage: print("Hello World", {f: custom_object})
- *
+ *     args*   [in, variadic] - items to print
+ *     kwargs*      [in, opt] - string(s) in the following format: 'option=value'.
+ *                              Where 'option' can be any of the following:
+ *                              'sep' or 's' - separator, 'end' or 'e' - ending
+ *                              character(s), 'file' or 'f' - file to write to,
+ *                              defaults to stdout. Other values are also available
+ *                              for the 'file' option, see below:
+ * Other values for 'file'[file=value] option:
+ * 1.) Specify a question mark(?) followed by a function name to send output to
+ *     a custom function. Output is passed as 1st parameter.
  * 2.) Alternatively, output may also be displayed on the script's main window.
- *     To do so, argument must begin with a colon(:) optionally followed by one
+ *     To do so, 'value' must begin with a colon(:) optionally followed by one
  *     or more of the following option(s), whitespace-delimited:
  *     Xn,Yn,Wn,Hn - size and position of the script's main window when shown.
  *     Tn          - timeout in milliseconds before returning. If value is
@@ -25,70 +28,59 @@
  *                   timeout has elapsed. Otherwise, window remains visible.
  *                   To wait indefinitely, specify an asterisk for 'n'. Default
  *                   is 0.
- *     Usage: print("Hello World", {f: ":x0 y0 w600 h400 t5000"}) ; 5 seconds
- *
- * 3.) To send output to one of the standard I/O streams (stdin[uncommon, does
- *     it even work??], stdout & stderror), specify 0 up to 2 asterisks(*).
- *     Wherein, no asterisk is stdin, 1 asterisk is stdout and 2 asterisks is
- *     stderror. Default value of kwargs["f"] is "*", which is stdout.
- *     Usage: print("Hello World", {f:"**"}) ; print to stderror
- *
- * Remarks:
- *     When printing actual object(s), only standard AHK object(s) are supported.
- *     Other types such as COM, Func, File, RegExMatch, etc. objects are not
- *     supported.
+ * 3.) To send output to one of the standard I/O streams (stdout / stderror),
+ *     specify 0 up to 2 asterisks(*). Wherein, one(1) asterisk is stdout and
+ *     two(2) asterisks is stderror. Default value for file is "*".
+ * Example usage:
+ *     ; Displays 'Auto|Hot|Key>' in the script's main window.
+ *     print( "Auto", "Hot", "Key", "sep=|", "end=>", "file=:x0 y0 t*" )
  */
-print(args*) {
-	static is_v2 := A_AhkVersion >= "2"
-	     , len   := Func(is_v2 ? "ObjLength"   : "ObjMaxIndex")
-	     , del   := Func(is_v2 ? "ObjRemoveAt" : "ObjRemove")
-	static default := { ;// default values for kwargs
-	(Join Q C
-		"f": "*", ;// file to write to, default is stdout
-		"s": "",  ;// separator
-		"e": "`n" ;// end
-	)}
-	;// MaxIndex/Length == Count
-	if ((max := %len%(args)) == NumGet(&args+4*A_PtrSize)) {
-		match := false
-		for k in args[max]
-			match := default.HasKey(k)
-		until !match
-		kwargs := match ? %del%(args, max) : default
-	;// kwargs parameter passed using variadic syntax -> kwargs*
-	} else {
-		kwargs := args.Clone(), kwargs.Remove(1, max)
-		for k in kwargs
-			args.Remove(k)
+print(args*)
+{
+	static RemoveAt := Func( A_AhkVersion < "2" ? "ObjRemove" : "ObjRemoveAt" )
+	static ndl := "si)^(f(ile)?|s(ep)?|e(nd)?)=.*$"
+
+	n := NumGet(&args + 4*A_PtrSize), kwargs := {}
+	for i, arg in ObjClone(args)
+	{
+		if (A_Index > 1) && (A_Index > n-(n > 3 ? 3 : n-1))
+		{
+			if !(arg ~= ndl)
+				continue
+			%RemoveAt%(args, i - NumGet(&kwargs + 4*A_PtrSize))
+			, opt := SubStr(SubStr(arg, 1, (i := InStr(arg, "="))-1), 1, 1)
+			, kwargs[ opt ] := %opt% := SubStr(arg, i+1)
+		}
 	}
-	for key, val in (kwargs != default ? default : 0)
-		if !kwargs.HasKey(key)
-			kwargs[key] := val
-	out := "", max := %len%(args)
-	for i, obj in args
-		out .= (IsObject(obj) ? print_r(obj) : obj) . kwargs[i < max ? "s" : "e"]
+	static default := { "f": "*", "s": "", "e": "`n" }
+	for opt, value in default
+		if !kwargs.HasKey(opt)
+			%opt% := value
 	
-	;// File object(not advisable) OR custom object with a Write(string) method
-	if IsObject(file := kwargs.f) {
-		file.Write(out)
+	out := "", n := NumGet(&args + 4*A_PtrSize)
+	for i, arg in args
+		out .= ( IsObject(arg) ? print_r(arg) : arg ) . ( i < n ? s : e )
+	
+	;// send output to a function
+	if (SubStr(f, 1, 1) == "?")
+		if (fn := Func(SubStr(f, 2)))
+			return %fn%(out)
+
+	;// write output to file
+	if (SubStr(f, 1, 1) != ":")
+	{
+		if (is_std := InStr("**", f)) ;// Standard IO streams
+			f := DllCall("GetStdHandle", "Int", -10-StrLen(f), "Ptr")
+		if (file := FileOpen(f, is_std ? "h" : "w"))
+			file.Write(out), file.Close()
 		return
 	}
 
-	file := Trim(file, " `t`r`n")
-	if (SubStr(file, 1, 1) != ":") {
-		if (is_std := InStr("**", file)) ;// Standard IO streams
-			file := DllCall("GetStdHandle", "Int", -10-StrLen(file), "Ptr")
-		if (f := FileOpen(file, is_std ? "h" : "w"))
-			f.Write(out), f.Close() ;// flushes the write buffer
+	;// else print to script's main window
+	DetectHiddenWindows % (dhw := A_DetectHiddenWindows) ? "On" : "On"
+	if !WinExist("ahk_id " A_ScriptHwnd)
 		return
-	}
-	;// else print output to script's main window
-	dhw := A_DetectHiddenWindows
-	DetectHiddenWindows On
-	if !WinExist("ahk_id " A_ScriptHwnd) ;// make LastFound
-		return
-	out := Trim(out, kwargs.e) ;// remove 'end' ??
-	;// convert line endings to "`r`n" (Windows)
+
 	i := 0
 	while (i := InStr(out, "`r`n",, i+1)) ;// DOS to Unix
 		out := SubStr(out, 1, i-1) . "`n" . SubStr(out, i+2)
@@ -98,23 +90,24 @@ print(args*) {
 	i := -1
 	while (i := InStr(out, "`n",, i+2)) ;// Unix to DOS
 		out := SubStr(out, 1, i-1) . "`r`n" . SubStr(out, i+1)
-	
 	ControlGet hEdit, Hwnd,, Edit1
 	ControlSetText,, %out%, ahk_id %hEdit%
-	;// parse options
-	f := SubStr(file, 2), file := is_v2? f : "f"
-	, x := y := w := h := "", t := 0
-	Loop Parse, %file%, % " `t`r`n"
+	
+	static delims := [" ", "`t", "`r", "`n"]
+	x := y := w := h := "", t := 0 ;// initialize with default values
+	for i, option in StrSplit(SubStr(f, 2), delims)
 	{
-		if (InStr(" xywht", opt := SubStr(A_LoopField, 1, 1)) - 1) {
-			val := SubStr(A_LoopField, 2)
-			%opt% := (opt != "t") ? val : (val == "*" ? "" : val/1000)
+		if ( InStr(" xywht", opt := SubStr(option, 1, 1)) > 1 ) {
+			value := SubStr(option, 2)
+			%opt% := (opt != "t") ? value : (value == "*" ? "" : value/1000)
 		}
 	}
+	
 	WinMove ahk_id %A_ScriptHwnd%,, %x%, %y%, %w%, %h%
 	if !DllCall("IsWindowVisible", "Ptr", A_ScriptHwnd)
 		WinShow
-	if (t != 0) { ;// No need to call these commands if timeout is 0
+	if (t != 0) ;// No need to call these commands if timeout is 0
+	{
 		DetectHiddenWindows Off
 		WinWaitClose, ahk_id %A_ScriptHwnd%,, % Abs(t)
 		if (ErrorLevel && t < 0) ;// timed out and value is negative
