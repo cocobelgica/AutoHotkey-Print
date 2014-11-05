@@ -1,7 +1,7 @@
 /* Function: Print
  *     Print 'args' to to the stream 'file' separated by 'sep' and followed
  *     by 'end' OR alternatively sends the output the script's main window or
- *     to the specified function.
+ *     to a specified function.
  * Requirements: AutoHotkey v1.1+ OR v2.0-a054+
  * License: WTFPL [http://www.wtfpl.net/]
  * Syntax:
@@ -15,8 +15,9 @@
  *                              'sep' or 's' - separator, 'end' or 'e' - ending
  *                              character(s), 'file' or 'f' - file to write to,
  *                              defaults to stdout. Other values are also available
- *                              for the 'file' option, see below:
- * Other values for 'file'[file=value] option:
+ *                              for the 'file' option as listed below in the
+ *                              next section.
+ * Other values for 'file' option:
  * 1.) Specify a question mark(?) followed by a function name to send output to
  *     a custom function. Output is passed as 1st parameter.
  * 2.) Alternatively, output may also be displayed on the script's main window.
@@ -38,45 +39,43 @@
 print(args*)
 {
 	static RemoveAt := Func( A_AhkVersion < "2" ? "ObjRemove" : "ObjRemoveAt" )
-	static ndl := "si)^(f(ile)?|s(ep)?|e(nd)?)=.*$"
 
-	n := NumGet(&args + 4*A_PtrSize), kwargs := {}
-	for i, arg in ObjClone(args)
+	;// Initialize w/ default values first: file=stdout, sep=none, end=newline
+	f := "*", s := "", e := "`n"
+
+	;// Process args, separate options from the object(s) to be printed
+	;// n+1 = index where first option could be expected
+	n := (n := NumGet(&args + 4*A_PtrSize)) - (n > 3 ? 3 : n-1) 
+	j := 0 ;// counter, incremented every time a valid option is found
+	for i, arg in ObjClone(args) ;// clone so that we can remove items during enumeration
 	{
-		if (A_Index > 1) && (A_Index > n-(n > 3 ? 3 : n-1))
+		if (A_Index > n) && (arg ~= "si)^(f(ile)?|s(ep)?|e(nd)?)=.*$")
 		{
-			if !(arg ~= ndl)
-				continue
-			%RemoveAt%(args, i - NumGet(&kwargs + 4*A_PtrSize))
-			, opt := SubStr(SubStr(arg, 1, (i := InStr(arg, "="))-1), 1, 1)
-			, kwargs[ opt ] := %opt% := SubStr(arg, i+1)
+			%RemoveAt%(args, i-j++) ;// remove from array of objects to print
+			opt := SubStr(arg, 1, 1), %opt% := SubStr(arg, InStr(arg, "=")+1)
 		}
 	}
-	static default := { "f": "*", "s": "", "e": "`n" }
-	for opt, value in default
-		if !kwargs.HasKey(opt)
-			%opt% := value
 	
+	;// Prepare string output: <item1><sep><item2><sep>...<end>
 	out := "", n := NumGet(&args + 4*A_PtrSize)
 	for i, arg in args
 		out .= ( IsObject(arg) ? print_r(arg) : arg ) . ( i < n ? s : e )
 	
-	;// send output to a function
-	if (SubStr(f, 1, 1) == "?")
-		if (fn := Func(SubStr(f, 2)))
+	;// Output is to be sent to a function
+	if ( (tok := SubStr(f, 1, 1)) == "?" )
+		if (fn := Func(SubStr(f, 2))) ;// call if it's a valid function else cast
 			return %fn%(out)
 
-	;// write output to file
-	if (SubStr(f, 1, 1) != ":")
+	;// Output is to be written to a file or standard stream
+	if (tok != ":")
 	{
-		if (is_std := InStr("**", f)) ;// Standard IO streams
-			f := DllCall("GetStdHandle", "Int", -10-StrLen(f), "Ptr")
-		if (file := FileOpen(f, is_std ? "h" : "w"))
-			file.Write(out), file.Close()
+		static fso := ComObjCreate("Scripting.FileSystemObject")
+		f := InStr("**", f) ? fso.GetStandardStream(StrLen(f)) : FileOpen(f, "w")
+		f.Write(out), f.Close()
 		return
 	}
 
-	;// else print to script's main window
+	;// Else print to script's main window
 	DetectHiddenWindows % (dhw := A_DetectHiddenWindows) ? "On" : "On"
 	if !WinExist("ahk_id " A_ScriptHwnd)
 		return
@@ -97,7 +96,8 @@ print(args*)
 	x := y := w := h := "", t := 0 ;// initialize with default values
 	for i, option in StrSplit(SubStr(f, 2), delims)
 	{
-		if ( InStr(" xywht", opt := SubStr(option, 1, 1)) > 1 ) {
+		if ( InStr(" xywht", opt := SubStr(option, 1, 1)) > 1 )
+		{
 			value := SubStr(option, 2)
 			%opt% := (opt != "t") ? value : (value == "*" ? "" : value/1000)
 		}
@@ -131,22 +131,25 @@ print(args*)
  * TODO:
  *     Add detection of circular references, output as '{...}' like Python
  */
-print_r(obj) {
+print_r(obj)
+{
 	static is_v2   := A_AhkVersion >= "2", q := Chr(34)
 	     , type    := is_v2 ? Func("Type") : ""
 	     , regex   := RegExMatch("", is_v2? "" : "O)", regex) ? regex : 0
 	     , _i64tos := "msvcrt.dll\_i64to" . ( A_IsUnicode ? "w" : "a" )
 	
-	if IsObject(obj) {
+	if IsObject(obj)
+	{
 		tobj := is_v2                           ? %type%(obj)
 		     :  ObjGetCapacity(obj) != ""       ? "Object"
 		     :  IsFunc(obj)                     ? "Func"
 		     :  ComObjType(obj) != ""           ? "ComObject"
 		     :  NumGet(&obj) == NumGet(&regex)  ? "RegExMatchObject"
 		     :                                    "FileObject"
-		if (tobj != "Object") {
+		if (tobj != "Object")
+		{
 			VarSetCapacity(out, 65, 0)
-			, DllCall(_i64tos, "Int64", &obj, "Str", out, "UInt", 16, "CDecl")
+			DllCall(_i64tos, "Int64", &obj, "Str", out, "UInt", 16, "CDecl")
 			return "<" . tobj . " at 0x" . out . ">"
 		}
 		;// standard AHK object
@@ -155,7 +158,8 @@ print_r(obj) {
 			if !( is_array := (k == A_Index) )
 				break
 		out := "", enum := ObjNewEnum(obj) ;// reset enumerator
-		while enum[k, v] { ;// for k, v in obj
+		while enum[k, v] ;// for k, v in obj
+		{
 			if !is_array
 				out .= print_r(k) . ": "
 			out .= print_r(v) . ", "
@@ -163,7 +167,8 @@ print_r(obj) {
 		out := Trim(out, ", ")
 		return is_array ? "[" out "]" : "{" out "}"
 	}
-	if (ObjGetCapacity([obj], 1) == "") ;// not a string, assume number
+	;// not a string, assume number
+	if (ObjGetCapacity([obj], 1) == "")
 		return obj
 	
 	static esc_seq := { ;// AHK escape sequences
@@ -180,7 +185,8 @@ print_r(obj) {
 	i := -1
 	while (i := InStr(obj, "``",, i+2))
 		obj := SubStr(obj, 1, i-1) . "````" . SubStr(obj, i+1)
-	for k, v in esc_seq {
+	for k, v in esc_seq
+	{
 		/* StringReplace/StrReplace routine for v1.1 & v2.0-a compatibility
 		 * TODO: Compare speed with RegExReplace()
 		 */
