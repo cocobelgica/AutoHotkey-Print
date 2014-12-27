@@ -2,7 +2,7 @@
  *     Print 'args' to to the stream 'file' separated by 'sep' and followed
  *     by 'end' OR alternatively sends the output the script's main window or
  *     to a specified function.
- * Requirements: AutoHotkey v1.1+ OR v2.0-a054+
+ * Requirements: AutoHotkey v1.1.17+ OR v2.0-a056+
  * License: WTFPL [http://www.wtfpl.net/]
  * Syntax:
  *     print( args* [, kwargs := [ "file=*", "sep=", "end=`n" ] ] )
@@ -69,8 +69,9 @@ print(args*)
 	;// Output is to be written to a file or standard stream
 	if (tok != ":")
 	{
-		static fso := ComObjCreate("Scripting.FileSystemObject")
-		f := InStr("**", f) ? fso.GetStandardStream(StrLen(f)) : FileOpen(f, "w")
+		f := (A_AhkVersion >= "2") && InStr("**", f)
+		     ? FileOpen(DllCall("GetStdHandle", "UInt", -10-StrLen(f), "Ptr"), "h")
+		     : FileOpen(f, "w")
 		f.Write(out), f.Close()
 		return
 	}
@@ -134,24 +135,20 @@ print(args*)
 print_r(obj)
 {
 	static is_v2   := A_AhkVersion >= "2", q := Chr(34)
-	     , type    := is_v2 ? Func("Type") : ""
+	     , Type    := is_v2 ? Func("Type") : ""
 	     , regex   := RegExMatch("", is_v2? "" : "O)", regex) ? regex : 0
-	     , _i64tos := "msvcrt.dll\_i64to" . ( A_IsUnicode ? "w" : "a" )
 	
 	if IsObject(obj)
 	{
-		tobj := is_v2                           ? %type%(obj)
-		     :  ObjGetCapacity(obj) != ""       ? "Object"
-		     :  IsFunc(obj)                     ? "Func"
-		     :  ComObjType(obj) != ""           ? "ComObject"
-		     :  NumGet(&obj) == NumGet(&regex)  ? "RegExMatchObject"
-		     :                                    "FileObject"
-		if (tobj != "Object")
-		{
-			VarSetCapacity(out, 65, 0)
-			DllCall(_i64tos, "Int64", &obj, "Str", out, "UInt", 16, "CDecl")
-			return "<" . tobj . " at 0x" . out . ">"
-		}
+		ObjType := is_v2                           ? %Type%(obj)
+		        :  ObjGetCapacity(obj) != ""       ? "Object"
+		        :  IsFunc(obj)                     ? "Func"
+		        :  ComObjType(obj) != ""           ? "ComObject"
+		        :  NumGet(&obj) == NumGet(&regex)  ? "RegExMatchObject"
+		        :                                    "FileObject"
+		if (ObjType != "Object")
+			return Format("<{1:s} at {2:#x}>", ObjType, &obj)
+
 		;// standard AHK object
 		is_array := 0, enum := ObjNewEnum(obj) ;// bypass _NewEnum() meta-function
 		while enum[k] ;// for k in obj
