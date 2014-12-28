@@ -4,7 +4,7 @@
 
 Print _args_ to the stream _file_ separated by _sep_ and followed by _end_ OR alternatively display the output in the script's main window OR send output to a user-defined function.
 
-Requires v1.1.17+ or v2.0-a056+
+Requires v1.1.17+ or v2.0-a057+
 
 **License:** [WTFPL](http://www.wtfpl.net/)
 <hr>
