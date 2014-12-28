@@ -2,7 +2,7 @@
  *     Print 'args' to to the stream 'file' separated by 'sep' and followed
  *     by 'end' OR alternatively sends the output the script's main window or
  *     to a specified function.
- * Requirements: AutoHotkey v1.1.17+ OR v2.0-a056+
+ * Requirements: AutoHotkey v1.1.17+ OR v2.0-a057+
  * License: WTFPL [http://www.wtfpl.net/]
  * Syntax:
  *     print( args* [, kwargs := [ "file=*", "sep=", "end=`n" ] ] )
@@ -38,7 +38,7 @@
  */
 print(args*)
 {
-	static RemoveAt := Func( A_AhkVersion < "2" ? "ObjRemove" : "ObjRemoveAt" )
+	static ObjRemoveAt := Func( A_AhkVersion < "2" ? "ObjRemove" : "ObjRemoveAt" )
 
 	;// Initialize w/ default values first: file=stdout, sep=none, end=newline
 	f := "*", s := "", e := "`n"
@@ -51,7 +51,7 @@ print(args*)
 	{
 		if (A_Index > n) && (arg ~= "si)^(f(ile)?|s(ep)?|e(nd)?)=.*$")
 		{
-			%RemoveAt%(args, i-j++) ;// remove from array of objects to print
+			%ObjRemoveAt%(args, i-j++) ;// remove from array of objects to print
 			opt := SubStr(arg, 1, 1), %opt% := SubStr(arg, InStr(arg, "=")+1)
 		}
 	}
@@ -69,9 +69,7 @@ print(args*)
 	;// Output is to be written to a file or standard stream
 	if (tok != ":")
 	{
-		f := (A_AhkVersion >= "2") && InStr("**", f)
-		     ? FileOpen(DllCall("GetStdHandle", "UInt", -10-StrLen(f), "Ptr"), "h")
-		     : FileOpen(f, "w")
+		f := FileOpen(f, "w")
 		f.Write(out), f.Close()
 		return
 	}
