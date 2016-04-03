@@ -3,7 +3,7 @@
  * License:
  *     WTFPL [http://wtfpl.net/]
  * Version:
- *     v2.0.0 [updated 03/20/2016 (MM/DD/YYYY)]
+ *     v2.0.1 [updated 04/03/2016 (MM/DD/YYYY)]
  * Requirement:
  *     Latest version of AutoHotkey v1.1+ or v2.0-a
  * Installation:
@@ -94,7 +94,7 @@ print_(value, indent:="", gap:="")
 		static enum_obj   := NumGet(&(e := ObjNewEnum({})))
 
 		obj_type := type                         ? type.Call(value)
-		         :  ObjGetCapacity(value)        ? "Object"
+		         :  ObjGetCapacity(value) != ""  ? "Object"
 		         :  IsFunc(value)                ? "Func"
 		         :  ComObjType(value) != ""      ? "ComObject"
 		         :  NumGet(&value) == match_obj  ? "RegExMatchObject"
